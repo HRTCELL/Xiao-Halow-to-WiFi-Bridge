@@ -14,6 +14,8 @@ message(STATUS "MMIOT_ROOT: $ENV{MMIOT_ROOT}")
 # Workaround to allow us to use the link status callback in LWIP. The ESP-IDF does not current (as
 # of v5.1.1) exposed this option from the lwip (esp-lwip) component.
 add_compile_definitions(LWIP_NETIF_LINK_CALLBACK=1)
+# NAPT is enabled via sdkconfig (CONFIG_LWIP_IP_FORWARD + CONFIG_LWIP_IPV4_NAPT) so lwipopts.h
+# sets IP_NAPT; do not add_compile_definitions(IP_NAPT=1) here or it redefines and breaks the build.
 
 if(DEFINED COUNTRY_CODE)
     message (Using country code: ${COUNTRY_CODE})

@@ -19,9 +19,10 @@
 #include "mmosal.h"
 #include "mm_app_loadconfig.h"
 #include "mmwlan_regdb.def"
+#include "settings.h"
 
 
-// #define COUNTRY_CODE "AU"
+#define COUNTRY_CODE "US"
 #ifndef COUNTRY_CODE
 #error COUNTRY_CODE must be defined to the appropriate 2 character country code. \
        See mmwlan_regdb.def for valid options.
@@ -34,14 +35,14 @@
 /* Default SSID  */
 #ifndef SSID
 /** SSID of the AP to connect to. (Do not quote; it will be stringified.) */
-#define SSID                            MorseMicro
+#define SSID                            Halow1
 #endif
 
 /* Default passphrase  */
 #ifndef SAE_PASSPHRASE
 /** Passphrase of the AP (ignored if security type is not SAE).
  *  (Do not quote; it will be stringified.) */
-#define SAE_PASSPHRASE                  12345678
+#define SAE_PASSPHRASE                  letmein111
 #endif
 
 /* Default security type  */
@@ -52,7 +53,7 @@
 
 /* Configure the STA to use DHCP, this overrides any static configuration.
  * If the @c ip.dhcp_enabled is set in the config store that will take priority */
-// #define ENABLE_DHCP                     (1)
+#define ENABLE_DHCP                     (1)
 
 /* Static Network configuration */
 #ifndef STATIC_LOCAL_IP
@@ -130,9 +131,10 @@ const struct mmwlan_s1g_channel_list* load_channel_list(void)
 {
     char strval[16];
     const struct mmwlan_s1g_channel_list *channel_list;
+    bridge_settings_t s;
+    settings_load(&s);
 
-    /* Set the default channel list in case country code is not found */
-    (void)mmosal_safer_strcpy(strval, COUNTRY_CODE, sizeof(strval));
+    (void)mmosal_safer_strcpy(strval, s.country[0] ? s.country : COUNTRY_CODE, sizeof(strval));
     channel_list = mmwlan_lookup_regulatory_domain(get_regulatory_db(), strval);
     if (channel_list == NULL)
     {
@@ -145,16 +147,17 @@ const struct mmwlan_s1g_channel_list* load_channel_list(void)
 
 void load_mmwlan_sta_args(struct mmwlan_sta_args *sta_config)
 {
-    /* Load SSID */
-    (void)mmosal_safer_strcpy((char*)sta_config->ssid, STRINGIFY(SSID), sizeof(sta_config->ssid));
-    sta_config->ssid_len = strlen((char*)sta_config->ssid);
+    bridge_settings_t s;
+    settings_load(&s);
 
-    /* Load password */
-    (void)mmosal_safer_strcpy(sta_config->passphrase, STRINGIFY(SAE_PASSPHRASE),
+    (void)mmosal_safer_strcpy((char *)sta_config->ssid, s.halow_ssid[0] ? s.halow_ssid : STRINGIFY(SSID),
+                              sizeof(sta_config->ssid));
+    sta_config->ssid_len = strlen((char *)sta_config->ssid);
+
+    (void)mmosal_safer_strcpy(sta_config->passphrase, s.halow_pass[0] ? s.halow_pass : STRINGIFY(SAE_PASSPHRASE),
                               sizeof(sta_config->passphrase));
     sta_config->passphrase_len = strlen(sta_config->passphrase);
 
-    /* Load security type */
     sta_config->security_type = SECURITY_TYPE;
 }
 

@@ -26,10 +26,17 @@
 #include "mmwlan.h"
 #include "mmipal.h"
 
+#include "esp_err.h"
+#include "esp_netif.h"
+#include "esp_event.h"
+
 #include "mmiperf.h"
 #include "mm_app_common.h"
+#include "settings.h"
 
 /* ------------------------ Configuration options ------------------------ */
+
+    extern void start_2ghz_ap(void);
 
 /** Iperf configurations. */
 enum iperf_type
@@ -252,26 +259,35 @@ void app_main(void)
 {
     printf("\n\nMorse Iperf Demo (Built " __DATE__ " " __TIME__ ")\n\n");
 
-    /* Initialize and connect to Wi-Fi, blocks till connected */
+    settings_init();
+
+    /* 1. Initialize and connect to HaLow */
     app_wlan_init();
     app_wlan_start();
 
+    /* 2. Wait for the stack to settle */
+    printf("Waiting 2 seconds for Morse stack to settle...\n");
+    vTaskDelay(pdMS_TO_TICKS(2000));
+
+    /* 3. Start the 2.4GHz AP (This function is in nat_router.c) */
+    printf("\nStarting 2.4GHz Wi-Fi AP for NAT Routing...\n");
+    start_2ghz_ap();
+    printf("Web settings: connect to the AP and open http://192.168.4.1\n\n");
+
     enum iperf_type iperf_mode = IPERF_TYPE;
 
+    /* 4. Start the Iperf service based on the macro */
     switch (iperf_mode)
     {
     case IPERF_TCP_SERVER:
         start_tcp_server();
         break;
-
     case IPERF_UDP_SERVER:
         start_udp_server();
         break;
-
     case IPERF_UDP_CLIENT:
         start_udp_client();
         break;
-
     case IPERF_TCP_CLIENT:
         start_tcp_client();
         break;

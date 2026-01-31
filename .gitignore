@@ -64,6 +64,9 @@ test_multi_heap_host
 # VS Code Settings
 .vscode/
 
+# Clangd / IDE caches
+.cache/
+
 # VIM files
 *.swp
 *.swo

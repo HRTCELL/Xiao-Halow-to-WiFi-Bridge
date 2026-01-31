@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#pragma once
+
+#include <stdint.h>
+
 /**
  * @file
  * Morse Micro application helper routines for initializing/de-initializing the Wireless LAN
@@ -35,6 +39,12 @@
  * To set the parameters in config store from the command line, follow the
  * @ref MMCONFIG_PROGRAMMING instructions.
  */
+
+/**
+ * Returns the last sampled HaLow RSSI (dBm), or INT32_MIN if unknown.
+ * Updated every 15 seconds by the RSSI timer.
+ */
+int32_t get_halow_rssi(void);
 
 /**
  * Initializes the WLAN interface using settings specified in the config store.
