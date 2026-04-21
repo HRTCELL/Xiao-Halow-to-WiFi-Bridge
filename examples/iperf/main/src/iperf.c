@@ -257,7 +257,11 @@ static void start_udp_server(void)
  */
 void app_main(void)
 {
-    printf("\n\nMorse Iperf Demo (Built " __DATE__ " " __TIME__ ")\n\n");
+#if CONFIG_IDF_TARGET_ESP32C6
+    printf("\n\nSeeed Studio XIAO ESP32-C6 HaLow Bridge (Built " __DATE__ " " __TIME__ ")\n\n");
+#else
+    printf("\n\nSeeed Studio XIAO ESP32-S3 HaLow Bridge (Built " __DATE__ " " __TIME__ ")\n\n");
+#endif
 
     settings_init();
 

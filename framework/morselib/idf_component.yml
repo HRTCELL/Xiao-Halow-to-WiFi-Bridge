@@ -3,11 +3,12 @@
 
 dependencies:
     idf:
-        version: "==5.1.1"
+        version: ">=5.1.1"
     mmpktmem:
         version: "==2.6.4-esp32"
         path: ../src/mmpktmem
-description: Morselib WLAN component for the esp32s3
+description: Morselib WLAN component for the esp32
 targets:
     - esp32s3
+    - esp32c6
 version: "2.6.4-esp32"

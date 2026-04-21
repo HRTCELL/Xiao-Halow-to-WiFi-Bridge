@@ -21,8 +21,12 @@
 #define DNS_MAX_SERVERS                 2
 #endif
 
-/** XIAO ESP32-S3 user LED (yellow): status once every 10 s (1 blink = connected, 3 blinks = disconnected). */
+/** XIAO user LED: status once every 10 s (1 blink = connected, 3 blinks = disconnected). */
+#if CONFIG_IDF_TARGET_ESP32C6
+#define USER_LED_GPIO                   15
+#else
 #define USER_LED_GPIO                   21
+#endif
 #define LED_STATUS_INTERVAL_MS          10000
 #define LED_BLINK_STEP_MS               200
 
