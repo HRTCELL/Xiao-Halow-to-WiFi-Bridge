@@ -38,9 +38,9 @@
 #include "mmosal.h"
 
 /* File internal memory allocation (struct iperf_*): this defaults to
-   the heap */
+ *  the heap */
 #ifndef IPERF_ALLOC
-#define IPERF_ALLOC(type) mmosal_malloc_(sizeof(type))
+#define IPERF_ALLOC(type)      mmosal_malloc_(sizeof(type))
 #define IPERF_FREE(type, item) mmosal_free(item)
 #endif
 
@@ -54,52 +54,51 @@
 
 /** Time after which we consider a server session to have timed out. */
 #ifndef IPERF_UDP_SERVER_SESSION_TIMEOUT_MS
-#define IPERF_UDP_SERVER_SESSION_TIMEOUT_MS       (60000)
+#define IPERF_UDP_SERVER_SESSION_TIMEOUT_MS (60000)
 #endif
 
 /** Max number of times for UDP client to transmit final packet if it does not receive a report. */
 #ifndef IPERF_UDP_CLIENT_REPORT_RETRIES
-#define IPERF_UDP_CLIENT_REPORT_RETRIES           (3)
+#define IPERF_UDP_CLIENT_REPORT_RETRIES (3)
 #endif
 
 /** Interval between retransmits of UDP client's final packet if it does not receive a report. */
 #ifndef IPERF_UDP_CLIENT_REPORT_TIMEOUT_MS
-#define IPERF_UDP_CLIENT_REPORT_TIMEOUT_MS        (1000)
+#define IPERF_UDP_CLIENT_REPORT_TIMEOUT_MS (1000)
 #endif
 
 /** The maximum number of conecutive transmit failurse we tolerate before giving up. */
 #ifndef IPERF_UDP_CLIENT_MAX_CONSEC_FAILURES
-#define IPERF_UDP_CLIENT_MAX_CONSEC_FAILURES      (60)
+#define IPERF_UDP_CLIENT_MAX_CONSEC_FAILURES (60)
 #endif
 
 /** The wait time in milliseconds between retries before giving up. */
 #ifndef IPERF_UDP_CLIENT_RETRY_WAIT_TIME_MS
-#define IPERF_UDP_CLIENT_RETRY_WAIT_TIME_MS       (1000)
+#define IPERF_UDP_CLIENT_RETRY_WAIT_TIME_MS (1000)
 #endif
 
 /** Beginning of the local port range for the UDP client to use. */
 #ifndef IPERF_UDP_CLIENT_LOCAL_PORT_RANGE_BASE
-#define IPERF_UDP_CLIENT_LOCAL_PORT_RANGE_BASE    (5010)
+#define IPERF_UDP_CLIENT_LOCAL_PORT_RANGE_BASE (5010)
 #endif
 
 /** Size of the local port range for the UDP client to use (MUST be a power of 2). */
 #ifndef IPERF_UDP_CLIENT_LOCAL_PORT_RANGE_SIZE
-#define IPERF_UDP_CLIENT_LOCAL_PORT_RANGE_SIZE    (16)
+#define IPERF_UDP_CLIENT_LOCAL_PORT_RANGE_SIZE (16)
 #endif
 
 /** This is the Iperf settings struct sent from the client */
 struct iperf_settings
 {
 #define IPERF_FLAGS_ANSWER_TEST 0x80000000
-#define IPERF_FLAGS_ANSWER_NOW 0x00000001
+#define IPERF_FLAGS_ANSWER_NOW  0x00000001
     uint32_t flags;
     uint32_t num_threads; /* unused for now */
     uint32_t remote_port;
     uint32_t buffer_len; /* unused for now */
-    uint32_t win_band;   /* TCP window / UDP rate: unused for now */
-    uint32_t amount;     /* pos. value: bytes?; neg. values: time (unit is 10ms: 1/100 second) */
+    uint32_t win_band; /* TCP window / UDP rate: unused for now */
+    uint32_t amount; /* pos. value: bytes?; neg. values: time (unit is 10ms: 1/100 second) */
 };
-
 
 #define IPERF_HEADER_VERSION1 0x80000000
 
@@ -110,7 +109,6 @@ struct iperf_udp_header
     uint32_t tv_usec;
     uint32_t id_hi; /* Note: not present in Iperf 2.0.9 */
 };
-
 
 struct iperf_udp_server_report
 {
@@ -169,14 +167,15 @@ void iperf_list_add(struct mmiperf_state *item);
 void iperf_list_remove(struct mmiperf_state *item);
 
 /** Update the report data for the given iperf session based on the given time. */
-void iperf_finalize_report_and_invoke_callback(struct mmiperf_state *state, uint32_t duration_ms,
+void iperf_finalize_report_and_invoke_callback(struct mmiperf_state *state,
+                                               uint32_t duration_ms,
                                                enum mmiperf_report_type report_type);
 
 /**
  * Populate an iperf UDP server report to send to a client.
  *
- * @param base_state    Iperf session state data structure.
- * @param report        The report structure to populate.
+ * @param base_state Iperf session state data structure.
+ * @param report     The report structure to populate.
  */
 void iperf_populate_udp_server_report(struct mmiperf_state *base_state,
                                       struct iperf_udp_server_report *report);
@@ -184,11 +183,11 @@ void iperf_populate_udp_server_report(struct mmiperf_state *base_state,
 /**
  * Parse an iperf UDP server report received from a server.
  *
- * @param base_state    Iperf session state data structure. This will be updated based on the
+ * @param base_state Iperf session state data structure. This will be updated based on the
  *                      received report.
- * @param hdr           The iperf UDP header in the iperf frame.
- * @param report        The iperf UDP server report in the iperf frame.
- * @param version       The iperf version.
+ * @param hdr        The iperf UDP header in the iperf frame.
+ * @param report     The iperf UDP server report in the iperf frame.
+ * @param version    The iperf version.
  */
 bool iperf_parse_udp_server_report(struct mmiperf_state *base_state,
                                    const struct iperf_udp_header *hdr,
@@ -204,7 +203,7 @@ struct mmiperf_state *iperf_list_get(mmiperf_handle_t handle);
 /**
  * Get a pointer to iperf payload data at the given offset.
  *
- * @param offset    Offset into the data.
+ * @param offset Offset into the data.
  *
  * @returns a pointer into the data.
  */

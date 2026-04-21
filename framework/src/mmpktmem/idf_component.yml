@@ -1,4 +1,4 @@
-# Copyright 2024 Morse Micro
+# Copyright 2026 Morse Micro
 # SPDX-License-Identifier: Apache-2.0
 
 dependencies:
@@ -8,4 +8,6 @@ description: Morse Micro Packet Memory
 targets:
     - esp32s3
     - esp32c6
-version: "2.6.4-esp32"
+    - esp32c3
+    - esp32p4
+version: "2.10.4-esp32"

@@ -4,10 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 /**
  * @ingroup MMHAL
- * @defgroup MMHAL_WLAN WLAN HAL
+ * @defgroup MMHAL_WLAN Morse Micro WLAN Hardware Abstraction Layer (mmhal_wlan) API
  *
  * API for communicating with the WLAN transceiver.
  *
@@ -32,9 +31,9 @@
 #include "mmwlan.h"
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
-
 
 /**
  * Function prototype for interrupt handler callbacks.
@@ -65,16 +64,34 @@ void mmhal_wlan_init(void);
  */
 void mmhal_wlan_deinit(void);
 
+/** Morse chip type: MM6108 */
+extern const struct mmhal_chip mmhal_mm6108;
+
+/** Morse chip type: MM8108 */
+extern const struct mmhal_chip mmhal_mm8108;
+
+/**
+ * Get the type of Morse chip that is in use. This will determine how the driver attempts to
+ * communicate with the chip.
+ *
+ * Must return a return a reference to one of the following:
+ *  - @c mmhal_mm6108
+ *  - @c mmhal_mm8108
+ *
+ * @return Reference to the chip type to use.
+ */
+const struct mmhal_chip *mmhal_get_chip(void);
+
 /**
  * Get MAC address override.
  *
- * This function allows the HAL to override the MAC address to be used by the device. The
- * MAC address override should be written to @p mac_addr. If no override is required then
- * @p mac_addr should be left untouched.
+ * This function allows the HAL to override the MAC address to be used by the device. The MAC
+ * address override should be written to @p mac_addr. If no override is required then @p mac_addr
+ * should be left untouched.
  *
- * @param[out] mac_addr Location where the MAC address will be stored. This will be initialized
- *                      to zero the first time this function is invoked, and to the previously
- *                      configured MAC address on subsequent invocations.
+ * @param mac_addr Location where the MAC address will be stored. When called this will contain the
+ *                 MAC address provided by the transceiver if available or all zeros if no MAC
+ *                 address is available from the transceiver.
  */
 void mmhal_read_mac_addr(uint8_t *mac_addr);
 
@@ -179,7 +196,7 @@ struct mmhal_robuf
 
 /** Minimum length of data to be returned by @ref mmhal_wlan_read_bcf_file() and
  *  @ref mmhal_wlan_read_fw_file(). */
-#define MMHAL_WLAN_FW_BCF_MIN_READ_LENGTH   (4)
+#define MMHAL_WLAN_FW_BCF_MIN_READ_LENGTH (4)
 
 /**
  * Retrieves the content of the Morse Micro Board Configuration File and places it into the given
@@ -217,7 +234,6 @@ void mmhal_wlan_read_bcf_file(uint32_t offset, uint32_t requested_len, struct mm
  * is no longer required. Ignored if @c robuf->free_cb is @c NULL.
  */
 void mmhal_wlan_read_fw_file(uint32_t offset, uint32_t requested_len, struct mmhal_robuf *robuf);
-
 
 /**
  * @defgroup MMHAL_WLAN_SPI WLAN HAL API for SPI interface
@@ -284,15 +300,20 @@ void mmhal_wlan_hard_reset(void);
  *
  * Implementation of this function is optional if the external crystal initialization sequence
  * is not required. If this function is not implemented then the external crystal initialization
- * sequence will be disabled. Refer to the data sheet for your module to check if this initialization
- * is required.
+ * sequence will be disabled. Refer to the data sheet for your module to check if this
+ * initialization is required.
  *
  * @returns true if the external crystal initialization sequence is required else false.
  */
 bool mmhal_wlan_ext_xtal_init_is_required(void);
 
 /**
- * Issue the training sequence required to put the transceiver into SPI mode.
+ * Issue the training sequence. During this at least 74 clock cycles must be supplied to the chip
+ * to allow it to prepare for the first command. This is only invoked when using SPI mode in which
+ * case the CS shall be held high (@c mmhal_wlan_spi_cs_deassert()) during the 74 clock cycles.
+ *
+ * See section 6.4.1.1 of the SD spec "Physical Layer Simplified Specification Version 9.10" for
+ * more detail.
  */
 void mmhal_wlan_send_training_seq(void);
 
@@ -334,7 +355,6 @@ void mmhal_wlan_clear_spi_irq(void);
 
 /** @} */
 
-
 /**
  * @defgroup MMHAL_WLAN_PKT WLAN HAL API for packet memory allocation
  *
@@ -349,10 +369,8 @@ void mmhal_wlan_clear_spi_irq(void);
 /**
  * Flow control callback that can be invoked by the transmit packet memory manager to pause
  * and resume the data path in response to resource availability.
- *
- * @param state Current flow control state.
  */
-typedef void (*mmhal_wlan_pktmem_tx_flow_control_cb_t)(enum mmwlan_tx_flow_control_state state);
+typedef void (*mmhal_wlan_pktmem_tx_flow_control_cb_t)(void);
 
 /** Initialization arguments passed to @ref mmhal_wlan_pktmem_init().  */
 struct mmhal_wlan_pktmem_init_args
@@ -376,21 +394,28 @@ void mmhal_wlan_pktmem_init(struct mmhal_wlan_pktmem_init_args *args);
 void mmhal_wlan_pktmem_deinit(void);
 
 /**
+ * Gets the current TX flow control state.
+ *
+ * @return The current flow control state.
+ */
+enum mmwlan_tx_flow_control_state mmhal_wlan_pktmem_tx_flow_control_state(void);
+
+/**
  * Enumeration of packet classes used by @ref mmhal_wlan_alloc_mmpkt_for_tx().
  * These definitions must match the corresponding values in @c mmdrv_pkt_class.
  */
 enum mmhal_wlan_pkt_class
 {
-    MMHAL_WLAN_PKT_DATA_TID0,       /**< Data TID0 */
-    MMHAL_WLAN_PKT_DATA_TID1,       /**< Data TID1 */
-    MMHAL_WLAN_PKT_DATA_TID2,       /**< Data TID2 */
-    MMHAL_WLAN_PKT_DATA_TID3,       /**< Data TID3 */
-    MMHAL_WLAN_PKT_DATA_TID4,       /**< Data TID4 */
-    MMHAL_WLAN_PKT_DATA_TID5,       /**< Data TID5 */
-    MMHAL_WLAN_PKT_DATA_TID6,       /**< Data TID6 */
-    MMHAL_WLAN_PKT_DATA_TID7,       /**< Data TID7 */
-    MMHAL_WLAN_PKT_MANAGEMENT,      /**< 802.11 Management and other important frames */
-    MMHAL_WLAN_PKT_COMMAND,         /**< Commands from driver to chip */
+    MMHAL_WLAN_PKT_DATA_TID0, /**< Data TID0 */
+    MMHAL_WLAN_PKT_DATA_TID1, /**< Data TID1 */
+    MMHAL_WLAN_PKT_DATA_TID2, /**< Data TID2 */
+    MMHAL_WLAN_PKT_DATA_TID3, /**< Data TID3 */
+    MMHAL_WLAN_PKT_DATA_TID4, /**< Data TID4 */
+    MMHAL_WLAN_PKT_DATA_TID5, /**< Data TID5 */
+    MMHAL_WLAN_PKT_DATA_TID6, /**< Data TID6 */
+    MMHAL_WLAN_PKT_DATA_TID7, /**< Data TID7 */
+    MMHAL_WLAN_PKT_MANAGEMENT, /**< 802.11 Management and other important frames */
+    MMHAL_WLAN_PKT_COMMAND, /**< Commands from driver to chip */
 };
 
 /**
@@ -410,21 +435,62 @@ enum mmhal_wlan_pkt_class
  * @returns a pointer to the allocated packet on success or @c NULL on allocation failure.
  */
 struct mmpkt *mmhal_wlan_alloc_mmpkt_for_tx(uint8_t pkt_class,
-                                            uint32_t space_at_start, uint32_t space_at_end,
+                                            uint32_t space_at_start,
+                                            uint32_t space_at_end,
                                             uint32_t metadata_length);
 
 /**
  * Allocates an mmpkt for reception.
  *
- * @param capacity          Amount of space to allocate for data.
+ * @param pkt_class         The class of packet (to allow for prioritization). Currently
+ *                          used values are @ref MMHAL_WLAN_PKT_DATA_TID0 for data and
+ *                          management frames, and @ref MMHAL_WLAN_PKT_COMMAND for critical
+ *                          buffers used internally by the driver (e.g., for command responses)
+ *                          where known.
+ * @param capacity          Amount of space to allocate for data. A value of @c UINT32_MAX
+ *                          should allocate the largest available mmpkt (if supported).
  * @param metadata_length   Amount of space to allocate for metadata (used internally by the
  *                          Morse driver).
  *
  * @returns a pointer to the allocated packet on success or @c NULL on allocation failure.
  */
-struct mmpkt *mmhal_wlan_alloc_mmpkt_for_rx(uint32_t capacity, uint32_t metadata_length);
+struct mmpkt *mmhal_wlan_alloc_mmpkt_for_rx(uint8_t pkt_class,
+                                            uint32_t capacity,
+                                            uint32_t metadata_length);
 
 /** @} */
+
+/**
+ * This value represents the maximum size of a TX packet that can be allocated
+ * within the TX pool. It includes the packet size and the TX metadata.
+ */
+#ifndef MMHAL_WLAN_MMPKT_TX_MAX_SIZE
+#define MMHAL_WLAN_MMPKT_TX_MAX_SIZE (1668)
+#endif
+
+/**
+ * This value represents the maximum size of a RX packet that can be allocated
+ * within the RX pool. It includes the packet size and the RX metadata
+ */
+#ifndef MMHAL_WLAN_MMPKT_RX_MAX_SIZE
+#define MMHAL_WLAN_MMPKT_RX_MAX_SIZE (1672)
+#endif
+
+/**
+ * Size of the TX pool in blocks.
+ */
+#ifndef MMPKTMEM_TX_POOL_N_BLOCKS
+#define MMPKTMEM_TX_POOL_N_BLOCKS (20)
+#endif
+
+/**
+ * Size of the RX pool in blocks.
+ *
+ * @note Values less than 23 may result in instability.
+ */
+#ifndef MMPKTMEM_RX_POOL_N_BLOCKS
+#define MMPKTMEM_RX_POOL_N_BLOCKS (23)
+#endif
 
 /**
  * @defgroup MMHAL_WLAN_SDIO WLAN HAL API for SDIO interface
@@ -478,7 +544,7 @@ int mmhal_wlan_sdio_startup(void);
  *                      The returned value is undefined if the return code is not zero.
  *
  * @returns 0 on success, an error code from @ref mmhal_sdio_error_codes on failure.
-*/
+ */
 int mmhal_wlan_sdio_cmd(uint8_t cmd_idx, uint32_t arg, uint32_t *rsp);
 
 /**
@@ -487,7 +553,7 @@ int mmhal_wlan_sdio_cmd(uint8_t cmd_idx, uint32_t arg, uint32_t *rsp);
 struct mmhal_wlan_sdio_cmd53_write_args
 {
     /** The SDIO argument. This corresponds to the 32 bits of the command between
-      * the Command Index field and the CRC7 field. */
+     * the Command Index field and the CRC7 field. */
     uint32_t sdio_arg;
     /** Pointer to the data buffer. 32 bit word aligned. */
     const uint8_t *data;
@@ -517,7 +583,7 @@ int mmhal_wlan_sdio_cmd53_write(const struct mmhal_wlan_sdio_cmd53_write_args *a
 struct mmhal_wlan_sdio_cmd53_read_args
 {
     /** The SDIO argument. This corresponds to the 32 bits of the command between
-      * the Command Index field and the CRC7 field. */
+     * the Command Index field and the CRC7 field. */
     uint32_t sdio_arg;
     /** Pointer to the data buffer to receive the data. 32 bit word aligned. */
     uint8_t *data;
@@ -541,7 +607,6 @@ struct mmhal_wlan_sdio_cmd53_read_args
  */
 int mmhal_wlan_sdio_cmd53_read(const struct mmhal_wlan_sdio_cmd53_read_args *args);
 
-
 /**
  * @defgroup MMHAL_WLAN_SDIO_UTILS SDIO Utilities
  *
@@ -550,7 +615,6 @@ int mmhal_wlan_sdio_cmd53_read(const struct mmhal_wlan_sdio_cmd53_read_args *arg
  * @{
  */
 
-
 /*
  * SDIO argument definition, per SDIO Specification Version 4.10, Part E1, Section 5.3.
  */
@@ -558,23 +622,23 @@ int mmhal_wlan_sdio_cmd53_read(const struct mmhal_wlan_sdio_cmd53_read_args *arg
 /** SDIO CMD52/CMD53 R/W flag. */
 enum mmhal_sdio_rw
 {
-    MMHAL_SDIO_READ  = 0,               /**< Read operation */
-    MMHAL_SDIO_WRITE = (1ul << 31),     /**< Write operation */
+    MMHAL_SDIO_READ = 0, /**< Read operation */
+    MMHAL_SDIO_WRITE = (1ul << 31), /**< Write operation */
 };
 
 /** SDIO CMD52/CMD53 function number. */
 enum mmhal_sdio_function
 {
-    MMHAL_SDIO_FUNCTION_0 = 0,              /** Function 0 */
-    MMHAL_SDIO_FUNCTION_1 = (1ul << 28),    /** Function 1 */
-    MMHAL_SDIO_FUNCTION_2 = (2ul << 28),    /** Function 2 */
+    MMHAL_SDIO_FUNCTION_0 = 0, /** Function 0 */
+    MMHAL_SDIO_FUNCTION_1 = (1ul << 28), /** Function 1 */
+    MMHAL_SDIO_FUNCTION_2 = (2ul << 28), /** Function 2 */
 };
 
 /** SDIO CMD53 block mode*/
 enum mmhal_sdio_mode
 {
-    MMHAL_SDIO_MODE_BYTE = 0,               /** Byte mode */
-    MMHAL_SDIO_MODE_BLOCK = (1ul << 27),    /** Block mode */
+    MMHAL_SDIO_MODE_BYTE = 0, /** Byte mode */
+    MMHAL_SDIO_MODE_BLOCK = (1ul << 27), /** Block mode */
 };
 
 /** SDIO CMD53 OP code */
@@ -583,21 +647,21 @@ enum mmhal_sdio_opcode
     /** Operate on a single, fixed address. */
     MMHAL_SDIO_OPCODE_FIXED_ADDR = 0,
     /** Increment address by 1 after each byte. */
-    MMHAL_SDIO_OPCODE_INC_ADDR   = (1ul << 26),
+    MMHAL_SDIO_OPCODE_INC_ADDR = (1ul << 26),
 };
 
 /** CMD52/53 Register Address (17 bit) offset. */
 #define MMHAL_SDIO_ADDRESS_OFFSET (9)
 /** CMD52/53 Register Address maximum value. */
-#define MMHAL_SDIO_ADDRESS_MAX    ((1ul << 18) - 1)
+#define MMHAL_SDIO_ADDRESS_MAX ((1ul << 18) - 1)
 
 /** CMD53 Byte/block count offset (9 bit). */
-#define MMHAL_SDIO_COUNT_OFFSET   (0)
+#define MMHAL_SDIO_COUNT_OFFSET (0)
 /**CMD53 Byte/block count maximum value. */
-#define MMHAL_SDIO_COUNT_MAX      ((1ul << 10) - 1)
+#define MMHAL_SDIO_COUNT_MAX ((1ul << 10) - 1)
 
 /** CMD52 Data (8 bit) offset */
-#define MMHAL_SDIO_CMD52_DATA_OFFSET  (0)
+#define MMHAL_SDIO_CMD52_DATA_OFFSET (0)
 
 /**
  * Construct an SDIO CMD52 argument based on the given arguments.
@@ -610,8 +674,10 @@ enum mmhal_sdio_opcode
  *
  * @return the SDIO CMD52 argument generated based on the given arguments.
  */
-static inline uint32_t mmhal_make_cmd52_arg(enum mmhal_sdio_rw rw, enum mmhal_sdio_function fn,
-                                            uint32_t address, uint8_t write_data)
+static inline uint32_t mmhal_make_cmd52_arg(enum mmhal_sdio_rw rw,
+                                            enum mmhal_sdio_function fn,
+                                            uint32_t address,
+                                            uint8_t write_data)
 {
     uint32_t arg;
 
@@ -635,8 +701,10 @@ static inline uint32_t mmhal_make_cmd52_arg(enum mmhal_sdio_rw rw, enum mmhal_sd
  *
  * @return the SDIO CMD53 argument generated based on the given arguments.
  */
-static inline uint32_t mmhal_make_cmd53_arg(enum mmhal_sdio_rw rw, enum mmhal_sdio_function fn,
-                                            enum mmhal_sdio_mode mode, uint32_t address,
+static inline uint32_t mmhal_make_cmd53_arg(enum mmhal_sdio_rw rw,
+                                            enum mmhal_sdio_function fn,
+                                            enum mmhal_sdio_mode mode,
+                                            uint32_t address,
                                             uint16_t count)
 {
     uint32_t arg;
@@ -650,7 +718,6 @@ static inline uint32_t mmhal_make_cmd53_arg(enum mmhal_sdio_rw rw, enum mmhal_sd
 /** @} */
 
 /** @} */
-
 
 #ifdef __cplusplus
 }

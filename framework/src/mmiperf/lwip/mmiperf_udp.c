@@ -6,6 +6,7 @@
 
 #include <stdatomic.h>
 
+#include "lwip/err.h"
 #include "mmosal.h"
 #include "../common/mmiperf_private.h"
 #include "mmiperf_lwip.h"
@@ -47,6 +48,7 @@ struct iperf_server_session_udp
 struct iperf_server_state_udp
 {
     struct mmiperf_state base;
+
     struct
     {
         ip_addr_t local_addr;
@@ -83,7 +85,6 @@ struct iperf_client_state_udp
 #define min(a, b) ((b) < (a) ? (b) : (a))
 #endif
 
-
 static bool udp_server_session_has_timed_out(struct iperf_server_state_udp *server_state)
 {
     return mmosal_time_has_passed(
@@ -91,7 +92,9 @@ static bool udp_server_session_has_timed_out(struct iperf_server_state_udp *serv
 }
 
 static struct iperf_server_session_udp *udp_server_start_session(
-    struct iperf_server_state_udp *server_state, const ip_addr_t *addr, uint16_t port)
+    struct iperf_server_state_udp *server_state,
+    const ip_addr_t *addr,
+    uint16_t port)
 {
     /* For now we only support a single session. */
     struct iperf_server_session_udp *session = &(server_state->session);
@@ -129,11 +132,13 @@ static struct iperf_server_session_udp *udp_server_start_session(
 #endif
 
 static struct iperf_server_session_udp *get_session(struct iperf_server_state_udp *server_state,
-                                                    const ip_addr_t *addr, uint16_t port)
+                                                    const ip_addr_t *addr,
+                                                    uint16_t port)
 {
     /* We only support a single session. */
     struct iperf_server_session_udp *session = &(server_state->session);
-    if (ip_addr_cmp_zoneless(&(session->client_addr), addr) && session->client_port == port &&
+    if (ip_addr_cmp_zoneless(&(session->client_addr), addr) &&
+        session->client_port == port &&
         !udp_server_session_has_timed_out(server_state))
     {
         return session;
@@ -156,37 +161,101 @@ static int32_t time_delta(const struct timeval *a, const struct timeval *b)
     return delta;
 }
 
-static void iperf_udp_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
-                                  const ip_addr_t *addr, uint16_t port)
+/* Construct and send server report after final packet if not a multicast address. */
+static void iperf_udp_server_handle_final_packet(struct iperf_server_state_udp *server_state,
+                                                 struct udp_pcb *pcb,
+                                                 const ip_addr_t *addr,
+                                                 uint16_t port,
+                                                 struct pbuf *p)
+{
+    struct pbuf *report_pbuf = NULL;
+
+    if (ip_addr_ismulticast(&(server_state->args.local_addr)))
+    {
+        return;
+    }
+
+    struct iperf_udp_server_report report;
+
+    report_pbuf =
+        pbuf_alloc(PBUF_TRANSPORT, sizeof(report) + sizeof(struct iperf_udp_header), PBUF_RAM);
+    if (report_pbuf == NULL)
+    {
+        LWIP_DEBUGF(LWIP_DBG_LEVEL_WARNING, ("Pbuf alloc failure.\n"));
+        goto report_cleanup;
+    }
+    err_t err = pbuf_copy_partial_pbuf(report_pbuf, p, sizeof(struct iperf_udp_header), 0);
+    if (err != ERR_OK)
+    {
+        LWIP_DEBUGF(LWIP_DBG_LEVEL_WARNING, ("Failed to retrieve header.\n"));
+        goto report_cleanup;
+    }
+
+    iperf_populate_udp_server_report(&server_state->base, &report);
+
+    err = pbuf_take_at(report_pbuf, &report, sizeof(report), sizeof(struct iperf_udp_header));
+
+    if (err != ERR_OK)
+    {
+        LWIP_DEBUGF(LWIP_DBG_LEVEL_WARNING, ("Failed to add report to pbuf.\n"));
+        goto report_cleanup;
+    }
+
+    err = udp_sendto(pcb, report_pbuf, addr, port);
+    if (err != ERR_OK)
+    {
+        LWIP_DEBUGF(LWIP_DBG_LEVEL_WARNING, ("Failed to send Iperf Server Report.\n"));
+    }
+
+report_cleanup:
+    if (report_pbuf != NULL)
+    {
+        pbuf_free(report_pbuf);
+    }
+}
+
+static void iperf_udp_server_recv(void *arg,
+                                  struct udp_pcb *pcb,
+                                  struct pbuf *p,
+                                  const ip_addr_t *addr,
+                                  uint16_t port)
 {
     struct iperf_server_state_udp *server_state = (struct iperf_server_state_udp *)arg;
 
     LWIP_ASSERT("NULL packet", p != NULL);
-    udp_header_t *hdr = (udp_header_t *)p->payload;
-    struct iperf_settings *settings = (struct iperf_settings *)(hdr + 1);
+
+    udp_header_t hdr = { 0 };
+
+    uint16_t copy_len = pbuf_copy_partial(p, &hdr, sizeof(hdr), 0);
+    if (copy_len != sizeof(hdr))
+    {
+        LWIP_DEBUGF(LWIP_DBG_LEVEL_WARNING, ("Dropping too short packet\n"));
+        goto cleanup;
+    }
+
+    struct iperf_settings settings = { 0 };
+    copy_len = pbuf_copy_partial(p, &settings, sizeof(settings), sizeof(hdr));
+    if (copy_len != sizeof(settings))
+    {
+        LWIP_DEBUGF(LWIP_DBG_LEVEL_WARNING, ("Dropping too short packet\n"));
+        goto cleanup;
+    }
+
     struct timeval packet_time = {
-        .tv_sec = ntohl(hdr->tv_sec),
-        .tv_usec = ntohl(hdr->tv_usec),
+        .tv_sec = ntohl(hdr.tv_sec),
+        .tv_usec = ntohl(hdr.tv_usec),
     };
     int64_t packet_id = 0;
     bool final_packet = false;
     struct iperf_server_session_udp *session = &server_state->session;
 
-    if (p->len < sizeof(*hdr) + sizeof(*settings))
-    {
-        /* Technically the header could be split over multiple pbufs but it is so small that is
-         * not going to happen in practice. */
-        LWIP_DEBUGF(LWIP_DBG_LEVEL_WARNING, ("Dropping too short packet\n"));
-        goto cleanup;
-    }
-
     if (server_state->args.version == IPERF_VERSION_2_0_9)
     {
-        packet_id = (int64_t)((int32_t)ntohl(hdr->id_lo));
+        packet_id = (int64_t)((int32_t)ntohl(hdr.id_lo));
     }
     else
     {
-        packet_id = (int64_t)(((uint64_t)ntohl(hdr->id_hi) << 32) | (uint64_t)ntohl(hdr->id_lo));
+        packet_id = (int64_t)(((uint64_t)ntohl(hdr.id_hi) << 32) | (uint64_t)ntohl(hdr.id_lo));
     }
 
     /* A negative packet ID indicates that this is the final packet. */
@@ -231,46 +300,18 @@ static void iperf_udp_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p
 
     if (final_packet)
     {
-        uint32_t duration_ms =
-            server_state->base.last_rx_time_ms - server_state->base.time_started_ms;
-        bool report_required = (session->next_packet_id >= 0);
-
-        session->next_packet_id = -1;
-
-        /* Send server report if not a multicast address */
-        if (!ip_addr_ismulticast(&(server_state->args.local_addr)))
+        /* Handle the local report if this is the first time receiving the final packet. */
+        if (session->next_packet_id >= 0)
         {
-            /* Construct and send a report. Reuse the given pbuf */
-            struct pbuf *report_buf = p;
-
-            if (report_buf->len >=
-                sizeof(struct iperf_udp_header) + sizeof(struct iperf_udp_server_report))
-            {
-                /* We use the UDP header and flags from the pbuf we received. */
-                struct iperf_udp_header *report_hdr =
-                    (struct iperf_udp_header *)report_buf->payload;
-                struct iperf_udp_server_report *report =
-                    (struct iperf_udp_server_report *)(report_hdr + 1);
-
-                iperf_populate_udp_server_report(&server_state->base, report);
-
-                err_t err = udp_sendto(pcb, report_buf, addr, port);
-                if (err != ERR_OK)
-                {
-                    LWIP_DEBUGF(LWIP_DBG_LEVEL_WARNING, ("Failed to send Iperf Server Report.\n"));
-                }
-            }
-            else
-            {
-                LWIP_DEBUGF(LWIP_DBG_LEVEL_WARNING, ("Bad alloc\n"));
-            }
-        }
-
-        if (report_required)
-        {
-            iperf_finalize_report_and_invoke_callback(&server_state->base, duration_ms,
+            uint32_t duration_ms =
+                server_state->base.last_rx_time_ms - server_state->base.time_started_ms;
+            iperf_finalize_report_and_invoke_callback(&server_state->base,
+                                                      duration_ms,
                                                       MMIPERF_UDP_DONE_SERVER);
+            session->next_packet_id = -1;
         }
+
+        iperf_udp_server_handle_final_packet(server_state, pcb, addr, port, p);
     }
 
 cleanup:
@@ -363,7 +404,8 @@ exit:
 }
 
 static err_t iperf_udp_client_send_packet(struct iperf_client_state_udp *session,
-                                          uint32_t tx_amount, bool final)
+                                          uint32_t tx_amount,
+                                          bool final)
 {
     udp_header_t *udp_hdr;
     struct iperf_settings *settings;
@@ -428,8 +470,8 @@ static err_t iperf_udp_client_send_packet(struct iperf_client_state_udp *session
     payload_pbuf = NULL;
 
     LOCK_TCPIP_CORE();
-    err_t err = udp_sendto(session->pcb, hdrs_pbuf,
-                           &(session->server_addr), session->args.server_port);
+    err_t err =
+        udp_sendto(session->pcb, hdrs_pbuf, &(session->server_addr), session->args.server_port);
     UNLOCK_TCPIP_CORE();
     pbuf_free(hdrs_pbuf);
     if (err != ERR_OK)
@@ -439,6 +481,30 @@ static err_t iperf_udp_client_send_packet(struct iperf_client_state_udp *session
     }
 
     return ERR_OK;
+}
+
+static void iperf_udp_client_report(struct iperf_client_state_udp *session,
+                                    uint32_t *final_duration_ms)
+{
+    struct iperf_udp_header hdr;
+    struct iperf_udp_server_report report;
+
+    uint16_t copy_len = pbuf_copy_partial(session->report, &hdr, sizeof(hdr), 0);
+    if (copy_len != sizeof(hdr))
+    {
+        LWIP_DEBUGF(LWIP_DBG_LEVEL_WARNING, ("iperf UDP received report too short\n"));
+        return;
+    }
+
+    copy_len = pbuf_copy_partial(session->report, &report, sizeof(report), sizeof(hdr));
+    if (copy_len != sizeof(report))
+    {
+        LWIP_DEBUGF(LWIP_DBG_LEVEL_WARNING, ("iperf UDP received report too short\n"));
+        return;
+    }
+
+    iperf_parse_udp_server_report(&session->base, &hdr, &report, session->args.version);
+    *final_duration_ms = session->base.report.duration_ms;
 }
 
 static void iperf_udp_client_task(void *arg)
@@ -479,14 +545,16 @@ static void iperf_udp_client_task(void *arg)
                            sizeof(session->base.report.local_addr));
     session->base.report.local_port = session->pcb->local_port;
     LWIP_ASSERT("IP buf too short", result != NULL);
-    mmosal_safer_strcpy(session->base.report.remote_addr, session->args.server_addr,
+    mmosal_safer_strcpy(session->base.report.remote_addr,
+                        session->args.server_addr,
                         sizeof(session->base.report.remote_addr));
     session->base.report.remote_port = session->args.server_port;
 
     while (!final && failure_cnt < IPERF_UDP_CLIENT_MAX_CONSEC_FAILURES)
     {
         /* If this is the last packet then set the counter to negative to inform the other side. */
-        if (sys_now() > end_time || remaining_amount <= (uint64_t)session->args.packet_size ||
+        if (sys_now() > end_time ||
+            remaining_amount <= (uint64_t)session->args.packet_size ||
             session->base.report.tx_frames >= UINT32_MAX - 10)
         {
             final = true;
@@ -539,18 +607,7 @@ static void iperf_udp_client_task(void *arg)
     uint32_t final_duration_ms = 0;
     if (session->report != NULL)
     {
-        struct iperf_udp_header *hdr = (struct iperf_udp_header *)session->report->payload;
-        struct iperf_udp_server_report *report = (struct iperf_udp_server_report *)(hdr + 1);
-
-        if (session->report->len < sizeof(*hdr) + sizeof(*report))
-        {
-            LWIP_DEBUGF(LWIP_DBG_LEVEL_WARNING, ("iperf UDP received report too short\n"));
-        }
-        else
-        {
-            iperf_parse_udp_server_report(&session->base, hdr, report, session->args.version);
-            final_duration_ms = session->base.report.duration_ms;
-        }
+        iperf_udp_client_report(session, &final_duration_ms);
         pbuf_free(session->report);
         session->report = NULL;
     }
@@ -573,13 +630,17 @@ static void iperf_udp_client_task(void *arg)
     session->report_semb = NULL;
     session->pcb = NULL;
     iperf_list_remove(&(session->base));
-    iperf_finalize_report_and_invoke_callback(&session->base, final_duration_ms,
+    iperf_finalize_report_and_invoke_callback(&session->base,
+                                              final_duration_ms,
                                               MMIPERF_UDP_DONE_CLIENT);
     IPERF_FREE(iperf_state_udp_t, session);
 }
 
-static void iperf_udp_client_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
-                                  const ip_addr_t *addr, uint16_t port)
+static void iperf_udp_client_recv(void *arg,
+                                  struct udp_pcb *pcb,
+                                  struct pbuf *p,
+                                  const ip_addr_t *addr,
+                                  uint16_t port)
 {
     (void)pcb;
 
@@ -676,8 +737,11 @@ mmiperf_handle_t mmiperf_start_udp_client(const struct mmiperf_client_args *args
         s->args.amount = MMIPERF_DEFAULT_AMOUNT;
     }
 
-    LWIP_DEBUGF(LWIP_DBG_LEVEL_ALL, ("Starting UDP iperf client to %s:%u, amount %ld\n",
-                s->args.server_addr, s->args.server_port, args->amount));
+    LWIP_DEBUGF(LWIP_DBG_LEVEL_ALL,
+                ("Starting UDP iperf client to %s:%u, amount %ld\n",
+                 s->args.server_addr,
+                 s->args.server_port,
+                 args->amount));
 
     /* target_bw (kbps) convert to block_tx_amount (bytes) = bw * (BLOCK_DURATION_MS / 8) */
     s->block_tx_amount = s->args.target_bw * BLOCK_DURATION_MS / 8;
@@ -734,8 +798,11 @@ mmiperf_handle_t mmiperf_start_udp_client(const struct mmiperf_client_args *args
 
     iperf_list_add(&s->base);
 
-    s->task = mmosal_task_create(iperf_udp_client_task, s, MMOSAL_TASK_PRI_LOW,
-                                 MMIPERF_STACK_SIZE, "iperf_udp");
+    s->task = mmosal_task_create(iperf_udp_client_task,
+                                 s,
+                                 MMOSAL_TASK_PRI_LOW,
+                                 MMIPERF_STACK_SIZE,
+                                 "iperf_udp");
     MMOSAL_ASSERT(s->task != NULL);
     result = &(s->base);
     s = NULL;

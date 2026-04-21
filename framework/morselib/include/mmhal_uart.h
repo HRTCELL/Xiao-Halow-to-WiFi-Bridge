@@ -4,36 +4,38 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
- /**
-  * @ingroup MMHAL
-  * @defgroup MMHAL_UART Morse Micro Abstraction Layer API for UART
-  *
-  * This provides an abstraction layer for a UART. This is used by MM-IoT-SDK example
-  * applications.
-  *
-  * This is a very simple API and leaves UART configuration to the HAL.
-  *
-  * @{
-  */
+/**
+ * @ingroup MMHAL
+ * @defgroup MMHAL_UART Morse Micro UART Hardware Abstraction Layer (mmhal_uart) API
+ *
+ * This provides an abstraction layer for a UART interface. This is used by MM-IoT-SDK example
+ * applications.
+ *
+ * This is a very simple API and leaves UART configuration to the HAL.
+ *
+ * @{
+ */
 
 #pragma once
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include "mmhal.h"
 #include "mmosal.h"
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
-
 
 /**
  * Function type for UART RX callback.
  *
- * @note The UART HAL must not invoke this function from interrupt context. However, the
- *       implementation should not block for long periods of time or received data may be lost.
+ * @note The UART HAL must not invoke this function from interrupt context. As such, it is safe for
+ *       implementations of this callback to assume that it will not be invoked from interrupt
+ *       context. However, implementations of this function should avoid blocking for long periods
+ *       of time, since this may result in the UART HAL dropping received data if its buffer becomes
+ *       full.
  *
  * @param data      The received data.
  * @param length    Length of the received data.
@@ -45,8 +47,6 @@ typedef void (*mmhal_uart_rx_cb_t)(const uint8_t *data, size_t length, void *arg
  * Initialize the UART HAL and perform any setup necessary.
  *
  * @param rx_cb     Optional callback to be invoked on receive (may be NULL).
- *                  This callback may be invoked from interrupt context so should return
- *                  quickly.
  * @param rx_cb_arg Optional opaque argument to be passed to the RX callback. May be NULL.
  */
 void mmhal_uart_init(mmhal_uart_rx_cb_t rx_cb, void *rx_cb_arg);
@@ -64,7 +64,6 @@ void mmhal_uart_deinit(void);
  * @param length    Length of @p data.
  */
 void mmhal_uart_tx(const uint8_t *data, size_t length);
-
 
 /** Enumeration of deep sleep modes for the UART HAL. */
 enum mmhal_uart_deep_sleep_mode
@@ -84,7 +83,6 @@ enum mmhal_uart_deep_sleep_mode
  * @returns true if the mode was set successfully; false on failure (e.g., unsupported mode).
  */
 bool mmhal_uart_set_deep_sleep_mode(enum mmhal_uart_deep_sleep_mode mode);
-
 
 #ifdef __cplusplus
 }

@@ -42,8 +42,6 @@
 #include "lwip/ip_addr.h"
 #include "lwip/tcp.h"
 
-
-
 /* Currently, only TCP is implemented */
 #if LWIP_TCP && LWIP_CALLBACK_API
 
@@ -69,12 +67,13 @@ struct iperf_state_tcp
 
 static err_t iperf_start_tcp_server_impl(const struct mmiperf_server_args *args,
                                          struct iperf_state_tcp **state);
+
 static err_t iperf_tcp_poll(void *arg, struct tcp_pcb *tpcb);
+
 static void iperf_tcp_err(void *arg, err_t err);
 
 /** Close an iperf tcp session */
-static void
-iperf_tcp_close(struct iperf_state_tcp *conn, enum mmiperf_report_type report_type)
+static void iperf_tcp_close(struct iperf_state_tcp *conn, enum mmiperf_report_type report_type)
 {
     err_t err;
 
@@ -114,8 +113,7 @@ iperf_tcp_close(struct iperf_state_tcp *conn, enum mmiperf_report_type report_ty
 }
 
 /** Try to send more data on an iperf tcp session */
-static err_t
-iperf_tcp_client_send_more(struct iperf_state_tcp *conn)
+static err_t iperf_tcp_client_send_more(struct iperf_state_tcp *conn)
 {
     int send_more;
     err_t err;
@@ -126,15 +124,14 @@ iperf_tcp_client_send_more(struct iperf_state_tcp *conn)
 
     LWIP_ASSERT("conn invalid", (conn != NULL) && conn->base.tcp && (conn->base.server == 0));
 
-    do
-    {
+    do {
         send_more = 0;
         if (conn->settings.amount & PP_HTONL(0x80000000))
         {
             /* this session is time-limited */
             uint32_t now = sys_now();
             uint32_t diff_ms = now - conn->base.time_started_ms;
-            uint32_t time = (uint32_t) - (int32_t)lwip_htonl(conn->settings.amount);
+            uint32_t time = (uint32_t)-(int32_t)lwip_htonl(conn->settings.amount);
             uint32_t time_ms = time * 10;
 
             if (diff_ms >= time_ms)
@@ -228,8 +225,7 @@ iperf_tcp_client_send_more(struct iperf_state_tcp *conn)
 }
 
 /** TCP sent callback, try to send more data */
-static err_t
-iperf_tcp_client_sent(void *arg, struct tcp_pcb *tpcb, u16_t len)
+static err_t iperf_tcp_client_sent(void *arg, struct tcp_pcb *tpcb, u16_t len)
 {
     struct iperf_state_tcp *conn = (struct iperf_state_tcp *)arg;
     /* @todo: check 'len' (e.g. to time ACK of all data)? for now, we just send more... */
@@ -256,32 +252,29 @@ static void init_report(struct iperf_state_tcp *conn, struct tcp_pcb *pcb)
 
     if (pcb != NULL)
     {
-        result = ipaddr_ntoa_r(&pcb->local_ip,
-                               report->local_addr, sizeof(report->local_addr));
+        result = ipaddr_ntoa_r(&pcb->local_ip, report->local_addr, sizeof(report->local_addr));
         LWIP_ASSERT("IP buf too short", result != NULL);
         report->local_port = pcb->local_port;
     }
 
     if (pcb != NULL)
     {
-        result = ipaddr_ntoa_r(&pcb->remote_ip,
-                               report->remote_addr, sizeof(report->remote_addr));
+        result = ipaddr_ntoa_r(&pcb->remote_ip, report->remote_addr, sizeof(report->remote_addr));
         LWIP_ASSERT("IP buf too short", result != NULL);
         report->remote_port = pcb->remote_port;
     }
 }
 
 /** TCP connected callback (active connection), send data now */
-static err_t
-iperf_tcp_client_connected(void *arg, struct tcp_pcb *tpcb, err_t err)
+static err_t iperf_tcp_client_connected(void *arg, struct tcp_pcb *tpcb, err_t err)
 {
     struct iperf_state_tcp *conn = (struct iperf_state_tcp *)arg;
     LWIP_ASSERT("invalid conn", conn->conn_pcb == tpcb);
     LWIP_UNUSED_ARG(tpcb);
     if (err != ERR_OK)
     {
-        LWIP_DEBUGF(LWIP_DBG_LEVEL_WARNING, ("Remote side aborted iperf test (%d)\n",
-                                             MMIPERF_TCP_ABORTED_REMOTE));
+        LWIP_DEBUGF(LWIP_DBG_LEVEL_WARNING,
+                    ("Remote side aborted iperf test (%d)\n", MMIPERF_TCP_ABORTED_REMOTE));
         iperf_tcp_close(conn, MMIPERF_TCP_ABORTED_REMOTE);
         return ERR_OK;
     }
@@ -297,9 +290,9 @@ iperf_tcp_client_connected(void *arg, struct tcp_pcb *tpcb, err_t err)
 /** Start TCP connection back to the client (either parallel or after the
  * receive test has finished.
  */
-static err_t
-iperf_tx_start_impl(const struct mmiperf_client_args *args, struct iperf_settings *settings,
-                    struct iperf_state_tcp **new_conn)
+static err_t iperf_tx_start_impl(const struct mmiperf_client_args *args,
+                                 struct iperf_settings *settings,
+                                 struct iperf_state_tcp **new_conn)
 {
     int result;
     err_t err;
@@ -321,8 +314,11 @@ iperf_tx_start_impl(const struct mmiperf_client_args *args, struct iperf_setting
         server_port = args->server_port;
     }
 
-    LWIP_DEBUGF(LWIP_DBG_LEVEL_ALL, ("Starting TCP iperf client to %s:%u, amount %ld\n",
-                args->server_addr, server_port, (int32_t)ntohl(settings->amount)));
+    LWIP_DEBUGF(LWIP_DBG_LEVEL_ALL,
+                ("Starting TCP iperf client to %s:%u, amount %ld\n",
+                 args->server_addr,
+                 server_port,
+                 (int32_t)ntohl(settings->amount)));
 
     client_conn = (struct iperf_state_tcp *)IPERF_ALLOC(struct iperf_state_tcp);
     if (client_conn == NULL)
@@ -398,8 +394,7 @@ iperf_tx_start_impl(const struct mmiperf_client_args *args, struct iperf_setting
 }
 
 /** Receive data on an iperf tcp session */
-static err_t
-iperf_tcp_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
+static err_t iperf_tcp_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
 {
     uint8_t tmp;
     u16_t tot_len;
@@ -412,8 +407,8 @@ iperf_tcp_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
 
     if (err != ERR_OK)
     {
-        LWIP_DEBUGF(LWIP_DBG_LEVEL_WARNING, ("Remote side aborted iperf test (%d)\n",
-                                             MMIPERF_TCP_ABORTED_REMOTE));
+        LWIP_DEBUGF(LWIP_DBG_LEVEL_WARNING,
+                    ("Remote side aborted iperf test (%d)\n", MMIPERF_TCP_ABORTED_REMOTE));
         iperf_tcp_close(conn, MMIPERF_TCP_ABORTED_REMOTE);
         return ERR_OK;
     }
@@ -432,8 +427,9 @@ iperf_tcp_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
         /* wait for 24-byte header */
         if (p->tot_len < sizeof(conn->settings))
         {
-            LWIP_DEBUGF(LWIP_DBG_LEVEL_WARNING, ("test aborted due to data check error  (%d)\n",
-                                                 MMIPERF_TCP_ABORTED_LOCAL_DATAERROR));
+            LWIP_DEBUGF(LWIP_DBG_LEVEL_WARNING,
+                        ("test aborted due to data check error  (%d)\n",
+                         MMIPERF_TCP_ABORTED_LOCAL_DATAERROR));
             iperf_tcp_close(conn, MMIPERF_TCP_ABORTED_LOCAL_DATAERROR);
             pbuf_free(p);
             return ERR_OK;
@@ -477,8 +473,7 @@ iperf_tcp_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
 }
 
 /** Error callback, iperf tcp session aborted */
-static void
-iperf_tcp_err(void *arg, err_t err)
+static void iperf_tcp_err(void *arg, err_t err)
 {
     struct iperf_state_tcp *conn = (struct iperf_state_tcp *)arg;
     LWIP_UNUSED_ARG(err);
@@ -493,8 +488,7 @@ iperf_tcp_err(void *arg, err_t err)
 }
 
 /** TCP poll callback, try to send more data */
-static err_t
-iperf_tcp_poll(void *arg, struct tcp_pcb *tpcb)
+static err_t iperf_tcp_poll(void *arg, struct tcp_pcb *tpcb)
 {
     struct iperf_state_tcp *conn = (struct iperf_state_tcp *)arg;
     LWIP_ASSERT("pcb mismatch", conn->conn_pcb == tpcb);
@@ -516,8 +510,7 @@ iperf_tcp_poll(void *arg, struct tcp_pcb *tpcb)
 }
 
 /** This is called when a new client connects for an iperf tcp session */
-static err_t
-iperf_tcp_accept(void *arg, struct tcp_pcb *newpcb, err_t err)
+static err_t iperf_tcp_accept(void *arg, struct tcp_pcb *newpcb, err_t err)
 {
     struct iperf_state_tcp *conn;
     if ((err != ERR_OK) || (newpcb == NULL) || (arg == NULL))

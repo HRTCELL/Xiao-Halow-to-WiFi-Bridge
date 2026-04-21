@@ -15,7 +15,6 @@
 #include "FreeRTOS_IPv4_Sockets.h"
 #include "FreeRTOS_IPv6_Sockets.h"
 
-
 /** Connection handle for a TCP iperf session */
 struct iperf_state_tcp
 {
@@ -41,28 +40,33 @@ struct iperf_state_tcp
     struct mmosal_task *tcp_server_task;
 };
 
-
 static int tcp_listen_on_new_socket(struct iperf_state_tcp *s)
 {
     int err = 0;
     TickType_t xTimeoutTime = pdMS_TO_TICKS(1000);
 
-    s->server_socket = FreeRTOS_socket(FREERTOS_AF_INET, FREERTOS_SOCK_STREAM,
-                                       FREERTOS_IPPROTO_TCP);
+    s->server_socket =
+        FreeRTOS_socket(FREERTOS_AF_INET, FREERTOS_SOCK_STREAM, FREERTOS_IPPROTO_TCP);
     if (s->server_socket == NULL)
     {
         FreeRTOS_debug_printf(("Failed to create TCP server socket\n"));
         return -1;
     }
 
-    err = FreeRTOS_setsockopt(s->server_socket, 0, FREERTOS_SO_RCVTIMEO, &xTimeoutTime,
+    err = FreeRTOS_setsockopt(s->server_socket,
+                              0,
+                              FREERTOS_SO_RCVTIMEO,
+                              &xTimeoutTime,
                               sizeof(TickType_t));
     if (err != 0)
     {
         FreeRTOS_debug_printf(("Setting FreeRTOS socket option FREERTOS_SO_RCVTIMEO failed\n"));
     }
 
-    err = FreeRTOS_setsockopt(s->server_socket, 0, FREERTOS_SO_SNDTIMEO, &xTimeoutTime,
+    err = FreeRTOS_setsockopt(s->server_socket,
+                              0,
+                              FREERTOS_SO_SNDTIMEO,
+                              &xTimeoutTime,
                               sizeof(TickType_t));
     if (err != 0)
     {
@@ -112,7 +116,8 @@ static void iperf_tcp_server_task(void *arg)
         if ((s->conn_socket != NULL) && FreeRTOS_issocketconnected(s->conn_socket))
         {
             iperf_freertosplustcp_session_start_common(&s->base,
-                                                       &s->tcp_server_sa, &s->tcp_client_sa);
+                                                       &s->tcp_server_sa,
+                                                       &s->tcp_client_sa);
         }
 
         while (s->conn_socket != NULL)
@@ -127,7 +132,8 @@ static void iperf_tcp_server_task(void *arg)
             if (!FreeRTOS_issocketconnected(s->conn_socket))
             {
                 uint32_t duration_ms = mmosal_get_time_ms() - s->base.time_started_ms;
-                iperf_finalize_report_and_invoke_callback(&s->base, duration_ms,
+                iperf_finalize_report_and_invoke_callback(&s->base,
+                                                          duration_ms,
                                                           MMIPERF_TCP_DONE_SERVER);
 
                 ret = FreeRTOS_closesocket(s->conn_socket);
@@ -196,8 +202,8 @@ static int iperf_start_tcp_server_impl(const struct mmiperf_server_args *args,
             }
             else
             {
-                FreeRTOS_debug_printf(("Unable to parse local_addr as IP address (%s)\n",
-                                       args->local_addr));
+                FreeRTOS_debug_printf(
+                    ("Unable to parse local_addr as IP address (%s)\n", args->local_addr));
             }
         }
 #else
@@ -240,8 +246,11 @@ static int iperf_start_tcp_server_impl(const struct mmiperf_server_args *args,
         goto exit;
     }
 
-    s->tcp_server_task = mmosal_task_create(iperf_tcp_server_task, s, MMOSAL_TASK_PRI_LOW,
-                                            MMIPERF_STACK_SIZE, "iperf_tcp_server");
+    s->tcp_server_task = mmosal_task_create(iperf_tcp_server_task,
+                                            s,
+                                            MMOSAL_TASK_PRI_LOW,
+                                            MMIPERF_STACK_SIZE,
+                                            "iperf_tcp_server");
     MMOSAL_ASSERT(s->tcp_server_task != NULL);
 
     iperf_list_add(&s->base);
@@ -312,14 +321,13 @@ static int iperf_tcp_client_send_more(struct iperf_state_tcp *conn)
 
     MMOSAL_ASSERT((conn != NULL) && conn->base.tcp && (conn->base.server == 0));
 
-    do
-    {
+    do {
         if (conn->settings.amount & FreeRTOS_htonl(0x80000000))
         {
             /* this session is time-limited */
             uint32_t now = mmosal_get_time_ms();
             uint32_t diff_ms = now - conn->base.time_started_ms;
-            uint32_t time = (uint32_t) - (int32_t)FreeRTOS_htonl(conn->settings.amount);
+            uint32_t time = (uint32_t)-(int32_t)FreeRTOS_htonl(conn->settings.amount);
             uint32_t time_ms = time * 10;
 
             if (diff_ms >= time_ms)
@@ -377,6 +385,12 @@ static int iperf_tcp_client_send_more(struct iperf_state_tcp *conn)
             conn->base.report.bytes_transferred += ret;
             conn->block_remaining_txlen -= ret;
         }
+        else if (ret == -pdFREERTOS_ERRNO_ENOTCONN)
+        {
+            printf("Socket connection was closed!\n");
+            iperf_tcp_close(conn, MMIPERF_TCP_ABORTED_REMOTE);
+            return -1;
+        }
         else
         {
             mmosal_task_sleep(1);
@@ -416,6 +430,16 @@ static void iperf_tcp_client_task(void *arg)
 }
 
 /**
+ * The number of miliseconds to attempt a send or receive over a TCP socket before timing out.
+ * This should be at least 5 seconds to allow enough time for a TCP handshake retry in the case
+ * where the STA's IP address already exists in the AP's ARP table under a different MAC address.
+ */
+#define IPERF_TCP_SOCKET_TIMEOUT_TIME_MS 5000
+
+MM_STATIC_ASSERT(IPERF_TCP_SOCKET_TIMEOUT_TIME_MS >= 5000,
+                 "Timeout must be at least 5000ms to allow time for a TCP handshake retry.\n");
+
+/**
  * Start TCP connection back to the client (either parallel or after the
  * receive test has finished.
  */
@@ -443,8 +467,9 @@ static int iperf_tx_start_impl(const struct mmiperf_client_args *args,
     }
 
     FreeRTOS_debug_printf(("Starting TCP iperf client to %s:%u, amount %ld\n",
-                          args->server_addr, server_port,
-                          (int32_t)FreeRTOS_ntohl(settings->amount)));
+                           args->server_addr,
+                           server_port,
+                           (int32_t)FreeRTOS_ntohl(settings->amount)));
 
     client_conn = (struct iperf_state_tcp *)mmosal_malloc(sizeof(*client_conn));
     if (client_conn == NULL)
@@ -486,22 +511,29 @@ static int iperf_tx_start_impl(const struct mmiperf_client_args *args,
 
     client_conn->conn_socket =
         FreeRTOS_socket((remote_addr.xIs_IPv6 ? FREERTOS_AF_INET6 : FREERTOS_AF_INET),
-                        FREERTOS_SOCK_STREAM, FREERTOS_IPPROTO_TCP);
+                        FREERTOS_SOCK_STREAM,
+                        FREERTOS_IPPROTO_TCP);
     if (client_conn->conn_socket == NULL)
     {
         mmosal_free(client_conn);
         return -1;
     }
 
-    TickType_t xTimeoutTime = pdMS_TO_TICKS(1000);
-    ok = FreeRTOS_setsockopt(client_conn->conn_socket, 0, FREERTOS_SO_RCVTIMEO, &xTimeoutTime,
+    TickType_t xTimeoutTime = pdMS_TO_TICKS(IPERF_TCP_SOCKET_TIMEOUT_TIME_MS);
+    ok = FreeRTOS_setsockopt(client_conn->conn_socket,
+                             0,
+                             FREERTOS_SO_RCVTIMEO,
+                             &xTimeoutTime,
                              sizeof(TickType_t));
     if (ok != 0)
     {
         FreeRTOS_debug_printf(("Setting FreeRTOS socket option FREERTOS_SO_RCVTIMEO failed\n"));
     }
 
-    ok = FreeRTOS_setsockopt(client_conn->conn_socket, 0, FREERTOS_SO_SNDTIMEO, &xTimeoutTime,
+    ok = FreeRTOS_setsockopt(client_conn->conn_socket,
+                             0,
+                             FREERTOS_SO_SNDTIMEO,
+                             &xTimeoutTime,
                              sizeof(TickType_t));
     if (ok != 0)
     {
@@ -549,7 +581,8 @@ static int iperf_tx_start_impl(const struct mmiperf_client_args *args,
         client_conn->tcp_server_sa.sin_address.ulIP_IPv4 = remote_addr.xIPAddress.ulIP_IPv4;
     }
 
-    ok = FreeRTOS_connect(client_conn->conn_socket, &client_conn->tcp_server_sa,
+    ok = FreeRTOS_connect(client_conn->conn_socket,
+                          &client_conn->tcp_server_sa,
                           sizeof(client_conn->tcp_server_sa));
     if (ok != 0)
     {
@@ -563,9 +596,11 @@ static int iperf_tx_start_impl(const struct mmiperf_client_args *args,
                                                &client_conn->tcp_client_sa,
                                                &client_conn->tcp_server_sa);
 
-    client_conn->tcp_client_task =
-        mmosal_task_create(iperf_tcp_client_task, client_conn, MMOSAL_TASK_PRI_LOW,
-                           MMIPERF_STACK_SIZE, "iperf_tcp_client");
+    client_conn->tcp_client_task = mmosal_task_create(iperf_tcp_client_task,
+                                                      client_conn,
+                                                      MMOSAL_TASK_PRI_LOW,
+                                                      MMIPERF_STACK_SIZE,
+                                                      "iperf_tcp_client");
     MMOSAL_ASSERT(client_conn->tcp_client_task != NULL);
 
     iperf_list_add(&client_conn->base);
