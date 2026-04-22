@@ -40,14 +40,33 @@ This project is based on the **Morse Micro MM-IoT-SDK v2.10.4**, which provides 
 - [ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/latest/esp32c6/) v5.4+
 - Environment variable **`MMIOT_ROOT`** set to this repository root.
 
+For local shells and Codex sandbox commands, source the repository helper after
+installing ESP-IDF:
+
+```bash
+source ./export.sh
+```
+
 ## Building
 
 ```bash
 cd examples/iperf
-export MMIOT_ROOT=$(pwd)/../..
+source ../../export.sh
 idf.py set-target esp32c6   # Or esp32s3
 idf.py build
 ```
+
+For the native ESP32-C6 Wi-Fi iperf-only example:
+
+```bash
+cd examples/iperf_esp32c6
+source ../../export.sh
+idf.py build
+```
+
+ESP-IDF v5.4 uses managed components for the native iperf command set, so
+the first build of `examples/iperf_esp32c6` needs network access to download
+the component-manager dependencies.
 
 ## Flashing
 
